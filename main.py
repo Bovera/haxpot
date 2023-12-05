@@ -3,19 +3,21 @@ import logging
 import sys
 import os
 import slixmpp
-
+from slixmpp import stanza
 import log
 import bank
 
 class EchoBot(slixmpp.ClientXMPP):
+
     def __init__(self):
         # 读取配置文件
-        f = open("config.json", "r")
-        self.config = json.loads(f.read())
-        f.close()
+        with open("config.json", "r") as f:
+            self.config = json.loads(f.read())
         self.log_data = log.Log(self.config, self.println)
         self.bank_data = bank.Bank(self.config)
-        self.naires = {} # 正在进行的问卷
+        self.naires:dict[str, bank.Questionaire] = {} # 正在进行的问卷
+        """正在进行的问卷"""
+
         # 账户、密码登陆
         slixmpp.ClientXMPP.__init__(self, self.config["jid"], self.config["password"])
         self.add_event_handler("session_start", self.start)
@@ -23,28 +25,33 @@ class EchoBot(slixmpp.ClientXMPP):
         self.add_event_handler("groupchat_message", self.muc_message)
 
     async def start(self, event):
+        """
+        初始化，发送在线状态并获取好友列表，加入群聊
+        :param event: 事件对象
+        """
         self.send_presence()
         await self.get_roster()
         self.plugin['xep_0045'].join_muc(self.config["log_group"], self.config["group_nick"])
 
     # 用户申请消息
-    def message(self, msg):
+    def message(self, msg: stanza.Message):
+        """处理用户申请消息"""
         if msg["type"] in ("normal", "chat"):
-            jid = msg["from"].bare
+            jid = msg["from"].bare # 用户的 JID
             # 正在申请
-            if self.naires.get(jid) != None:
-                reply = self.naires[jid].question(msg["body"])
+            naire = self.naires.get(jid)
+            if naire is not None:
+                reply = naire.question(msg["body"])
                 # 已经完成
-                if reply == None:
-                    if self.naires[jid].finish():
+                if reply is None:
+                    if naire.finish():
                         msg.reply(self.log_data.passed(jid)).send()
                     else:
                         msg.reply(self.log_data.failed(jid)).send()
-                    del self.naires[jid]
-                    return
-                # 未完成
-                msg.reply(reply).send()
-                return
+                    del self.naires[jid] # 删除问卷（引用的）
+                else:
+                    # 未完成则继续提问
+                    msg.reply(reply).send()
             
             # 开始回答
             if msg["body"] == "开始":
@@ -61,7 +68,7 @@ class EchoBot(slixmpp.ClientXMPP):
                 msg.reply(self.config["prompt"]).send()
         
     # 群内指令
-    def muc_message(self, msg):
+    def muc_message(self, msg: stanza.Message):
         nick = self.config["group_nick"]
         if msg["from"].bare == self.config["log_group"]:
             if msg["mucnick"] != nick and msg["body"].startswith(nick + ": "):
@@ -92,6 +99,7 @@ class EchoBot(slixmpp.ClientXMPP):
 
     # 输出到审核群
     def println(self, msg: str):
+        """发送消息到审核群"""
         self.send_message(mto=self.config["log_group"], mbody=msg, mtype="groupchat")
 
 if __name__ == '__main__':

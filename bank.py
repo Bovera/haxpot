@@ -31,6 +31,7 @@ class Questionaire:
     
     # 完成后检查是否通过
     def finish(self):
+        """检查是否通过审核"""
         if not self.in_time:
             return False
         if self.passed_num < self.config["pass_num"]:
@@ -43,17 +44,21 @@ class Questionaire:
     
     # 判断回答是否正确，给了多种回答选择
     def __judge(self, answer: str, real: bool):
+        """判断回复，转化成bool值。
+        比如把“是”、“对”、“正确”等都转化成True，把“否”、“错”、“错误”等都转化成False
+        """
         answer = answer.lstrip().rstrip() # 如果多打了空格，去掉
+        answer = answer.strip()  # 去除前后空格
         if answer[-1] in (".", "。"):
             answer = answer[:-1]
-        if real == True:
-            if answer in ("是", "对", "正确", "没错", "是的", "对的", "正确的", "对了"):
-                return True
-            else:
-                return False
-        if answer in ("否", "错", "错误", "不对", "错的", "错误的", "错了"):
-            return True
-        return False
+
+        positive_responses = ("是", "对", "正确", "没错", "是的", "对的", "正确的", "对了")
+        negative_responses = ("否", "错", "错误", "不对", "错的", "错误的", "错了")
+
+        if real:
+            return answer in positive_responses
+        else:
+            return answer in negative_responses
 
 # 题库
 class Bank:

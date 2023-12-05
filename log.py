@@ -1,16 +1,16 @@
 import datetime
 import time
+from typing import Callable
 import json
 import threading
 
 # 记录
 class Log:
     # 从 log_file 读取内容
-    def __init__(self, config: dict, println):
-        f = open(config["log_file"], "r")
-        self.data = json.loads(f.read())
+    def __init__(self, config: dict, println: Callable):
+        with open(config["log_file"], "r") as f:
+            self.data = json.loads(f.read())
         self.config = config
-        f.close()
         self.println = println # 输出函数
         # 计时，每一个小时重置
         self.t = threading.Thread(target=self.__reset)
@@ -18,6 +18,7 @@ class Log:
     
     # 答题未通过时调用
     def failed(self, jid: str):
+        """答题未通过，返回未通过回复"""
         reply = self.config["fail_reply"] # 未通过回复
         self.data[jid]["answering_num"] += 1
         # 超过最大答题次数
@@ -37,10 +38,10 @@ class Log:
         # 不存在就新建地址
         if data == None:
             self.data[jid] = {
-              "last_time": "2023-11-11 12:20:20",
-              "answering_num": 0,
-              "prohibited": False,
-              "passed": False
+                "last_time": "2023-11-11 12:20:20",
+                "answering_num": 0,
+                "prohibited": False,
+                "passed": False
             }
         # 已经封禁
         if self.data[jid]["prohibited"] == True:
@@ -63,6 +64,7 @@ class Log:
     
     # 答题通过时调用
     def passed(self, jid: str):
+        """答题通过，返回通过回复"""
         self.data[jid]["answering_num"] += 1
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.data[jid]["passed"] = True
@@ -81,10 +83,10 @@ class Log:
         # 不存在就新建地址后返回
         if data == None:
             self.data[jid] = {
-              "last_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-              "answering_num": 0,
-              "prohibited": False,
-              "passed": False
+                "last_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "answering_num": 0,
+                "prohibited": False,
+                "passed": False
             }
             self.applied += 1
             return True, self.config["apply_reply"]
