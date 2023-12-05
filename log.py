@@ -6,11 +6,12 @@ import threading
 # 记录
 class Log:
     # 从 log_file 读取内容
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, println):
         f = open(config["log_file"], "r")
         self.data = json.loads(f.read())
         self.config = config
         f.close()
+        self.println = println # 输出函数
         # 计时，每一个小时重置
         self.t = threading.Thread(target=self.__reset)
         self.t.start()
@@ -25,7 +26,40 @@ class Log:
             reply += self.config["prohibit_reply"] # 封禁回复
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.__write()
+        self.println(self.config["log_content"] % {"time": self.data[jid]["last_time"], "jid": jid,
+                                            "num": self.data[jid]["answering_num"], "ifpass": "未通过",
+                                            "total": self.applied})
         return reply
+    
+    # 直接封禁用户
+    def prohibit(self, jid: str):
+        data = self.data.get(jid)
+        # 不存在就新建地址
+        if data == None:
+            self.data[jid] = {
+              "last_time": "2023-11-11 12:20:20",
+              "answering_num": 0,
+              "prohibited": False,
+              "passed": False
+            }
+        # 已经封禁
+        if self.data[jid]["prohibited"] == True:
+            self.println("已经封禁“" + jid + "”，不要重复执行。")
+        else:
+            self.data[jid]["prohibited"] = True
+            self.__write()
+            self.println("已经封禁“" + jid + "”。")
+    
+    # 解除封禁
+    def allow(self, jid: str):
+        data = self.data.get(jid)
+        # 不存在或者没有封禁
+        if data == None or self.data[jid]["prohibited"] == False:
+            self.println("用户“" + jid + "”没有被封禁，不需要解除。")
+        else:
+            self.data[jid]["prohibited"] = False
+            self.__write()
+            self.println("已经解除“" + jid + "”的封禁。")
     
     # 答题通过时调用
     def passed(self, jid: str):
@@ -33,6 +67,9 @@ class Log:
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.data[jid]["passed"] = True
         self.__write()
+        self.println(self.config["log_content"] % {"time": self.data[jid]["last_time"], "jid": jid,
+                                            "num": self.data[jid]["answering_num"], "ifpass": "通过",
+                                            "total": self.applied})
         return self.config["pass_reply"] # 通过回复
     
     # 有人申请就调用
