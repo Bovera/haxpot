@@ -1,0 +1,41 @@
+# 账户信息
+[account]
+jid = "example@example.com" # 账户 JID
+password = "password" # 账户密码
+log_group = "example2@example.com" # 审核结果通知和机器人控制群
+ctrl_group = "example3@example.com" # 被机器人管理的群，自动授予成员权限
+nickname = "机器人" # 在这两个群中机器人的昵称
+
+# 题库信息
+[questions]
+bank = "bank.json" # 题库文件名称
+total = 20 # 每张问卷题目总数
+pass_score = 16 # 及格线，通过至少要答的题目数
+max_seconds = 360 # 限制回答秒数
+time_interval = 720 # 两次时间间隔（分钟）
+max_per_hour = 2 # 每小时允许的答题数量
+max_trial = 3 # 最大尝试次数
+
+# 与申请人的对话
+[reply]
+prompt = "这里为自动审核测试平台，请不要开启加密，发送“开始”开始答题。" # 发送任意信息时的提醒
+apply = "审核已开始，请在 %i 秒内完成回答，中途不要终止。请回答“对”或“错”（“是”或“否”）。" # 发送审核信号后的提醒
+pass_ = "恭喜您已通过自动审核，等待人工审核。" # 通过后的回复
+fail = "您的回答错误太多、超时或回答时间过短，很遗憾未通过审核。" # 未通过的回复
+prohibit = "您已被封禁，无法再次申请。" # 封禁时的回复
+passed = "您已通过审核，请不要重复申请！" # 通过后重复申请的回复
+prohibited = "您已被封禁，无法再次申请！" # 封禁后再次申请的回复
+exceeded = "同一时段申请人数过多，请 1 小时后再试。" # 同一时段申请过多的回复
+too_short = "您两次申请之间的时间太短，请 %i 分钟后再试。" # 两次申请时间过短的回复
+
+# 控制机器人
+[control]
+log_file = "log.json" # 日志文件
+log_content = "%(time)s: 用户“%(jid)s”第 %(num)s 次申请 *%(ifpass)s* 。本小时申请人次%(total)i/%(all)i。" # 输出的格式
+
+# 权限
+[authorization]
+shutdown = true # 是否允许操控关机
+full_auto = true # 是否允许在通过后给予成员权限
+invite = true # 是否使用邀请人制度
+kick = 30 # 定期清除不发言的人（单位天），0 不开启

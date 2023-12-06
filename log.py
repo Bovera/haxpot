@@ -4,12 +4,14 @@ from typing import Callable
 import json
 import threading
 
+import config
+
 # 记录
 class Log:
     # 从 log_file 读取内容
-    def __init__(self, config: dict, println: Callable):
-        with open(config["log_file"], "r") as f:
-            self.data = json.loads(f.read())
+    def __init__(self, config: config.Config, println: Callable):
+        with open(config.log_file, "r") as f:
+            self.data: dict[str, dict] = json.loads(f.read())
         self.config = config
         self.println = println # 输出函数
         # 计时，每一个小时重置
@@ -19,15 +21,15 @@ class Log:
     # 答题未通过时调用
     def failed(self, jid: str):
         """答题未通过，返回未通过回复"""
-        reply = self.config["fail_reply"] # 未通过回复
+        reply = self.config.fail # 未通过回复
         self.data[jid]["answering_num"] += 1
         # 超过最大答题次数
-        if self.data[jid]["answering_num"] >= self.config["max_trial"]:
+        if self.data[jid]["answering_num"] >= self.config.max_trial:
             self.data[jid]["prohibited"] = True
-            reply += self.config["prohibit_reply"] # 封禁回复
+            reply += self.config.prohibit # 封禁回复
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.__write()
-        self.println(self.config["log_content"] % {"time": self.data[jid]["last_time"], "jid": jid,
+        self.println(self.config.log_content % {"time": self.data[jid]["last_time"], "jid": jid,
                                             "num": self.data[jid]["answering_num"], "ifpass": "未通过",
                                             "total": self.applied})
         return reply
@@ -69,44 +71,51 @@ class Log:
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.data[jid]["passed"] = True
         self.__write()
-        self.println(self.config["log_content"] % {"time": self.data[jid]["last_time"], "jid": jid,
+        self.println(self.config.log_content % {"time": self.data[jid]["last_time"], "jid": jid,
                                             "num": self.data[jid]["answering_num"], "ifpass": "通过",
                                             "total": self.applied})
-        return self.config["pass_reply"] # 通过回复
+        return self.config.pass_ # 通过回复
     
     # 有人申请就调用
     def apply(self, jid: str):
         # 检测是否申请过多
-        if self.applied >= self.config["max_per_hour"]:
-            return False, self.config["exceeded_reply"]
+        if self.applied >= self.config.max_per_hour:
+            return False, self.config.exceeded
         data = self.data.get(jid)
         # 不存在就新建地址后返回
         if data == None:
-            self.data[jid] = {
-                "last_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "answering_num": 0,
-                "prohibited": False,
-                "passed": False
-            }
+            if self.config.invite:
+                return False, self.config.uninvited
+            self.invite(jid)
             self.applied += 1
-            return True, self.config["apply_reply"]
+            return True, self.config.apply
         # 检测是否已经通过或者封禁
         if self.data[jid]["passed"]:
-            return False, self.config["passed_reply"]
+            return False, self.config.passed
         if self.data[jid]["prohibited"]:
-            return False, self.config["prohibited_reply"]
+            return False, self.config.prohibited
         # 检测两次时间是否过短
-        wait_time = datetime.timedelta(minutes = self.config["time_interval"])
+        wait_time = datetime.timedelta(minutes = self.config.time_interval)
         last_time = datetime.datetime.strptime(self.data[jid]["last_time"], '%Y-%m-%d %H:%M:%S')
         if datetime.datetime.now() < last_time + wait_time:
-            return False, self.config["too_short_reply"]
+            return False, self.config.too_short
         
         self.applied += 1
-        return True, self.config["apply_reply"]
+        return True, self.config.apply
+    
+    # 邀请用户进群
+    def invite(self, jid: str):
+        self.data[jid] = {
+            "last_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "answering_num": 0,
+            "prohibited": False,
+            "passed": False
+        }
+        return "已经允许用户“%s”申请如群。" % jid
     
     # 将内容重新写回文件，每次修改后会自动进行
     def __write(self):
-        f = open(self.config["log_file"], "w")
+        f = open(self.config.log_file, "w")
         data = json.dumps(self.data, indent=2)
         f.write(data)
         f.close()

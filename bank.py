@@ -1,11 +1,12 @@
 import json
-import time
 import numpy as np
 import threading
 
+import config
+
 # 一份问卷
 class Questionaire:
-    def __init__(self, data: list, config: dict):
+    def __init__(self, data: list, config: config.Config):
         self.data = data
         # 状态，已经回答的、答对的
         self.total_num = 0
@@ -13,7 +14,7 @@ class Questionaire:
         self.config = config
         # 计时，超时不通过
         self.in_time = True
-        self.t = threading.Timer(self.config["max_seconds"], self.__clock)
+        self.t = threading.Timer(self.config.max_seconds, self.__clock)
         self.t.start()
     
     # 检查答案并返回下一题的问题（带题号），结束返回 None
@@ -34,7 +35,7 @@ class Questionaire:
         """检查是否通过审核"""
         if not self.in_time:
             return False
-        if self.passed_num < self.config["pass_num"]:
+        if self.passed_num < self.config.pass_score:
             return False
         return True
     
@@ -47,10 +48,7 @@ class Questionaire:
         """判断回复，转化成bool值。
         比如把“是”、“对”、“正确”等都转化成True，把“否”、“错”、“错误”等都转化成False
         """
-        answer = answer.lstrip().rstrip() # 如果多打了空格，去掉
-        answer = answer.strip()  # 去除前后空格
-        if answer[-1] in (".", "。"):
-            answer = answer[:-1]
+        answer = answer.strip().rstrip(".").rstrip("。")  # 去除前后空格，句尾句号
 
         positive_responses = ("是", "对", "正确", "没错", "是的", "对的", "正确的", "对了")
         negative_responses = ("否", "错", "错误", "不对", "错的", "错误的", "错了")
@@ -62,8 +60,8 @@ class Questionaire:
 
 # 题库
 class Bank:
-    def __init__(self, config: dict):
-        f = open(config["question_bank"], "r")
+    def __init__(self, config: config.Config):
+        f = open(config.bank, "r")
         self.data = json.loads(f.read())
         self.config = config
         f.close()
@@ -72,6 +70,6 @@ class Bank:
     def new_naire(self):
         keys = list(self.data.keys())
         l = []
-        for i in np.random.choice(keys, self.config["question_num"], replace=False):
+        for i in np.random.choice(keys, self.config.total, replace = False):
             l.append([i, self.data[i]])
         return Questionaire(l, self.config)

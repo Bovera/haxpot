@@ -1,0 +1,9 @@
+aiodns==3.1.1
+cffi==1.16.0
+numpy==1.26.2
+pyasn1==0.5.1
+pyasn1-modules==0.3.0
+pycares==4.4.0
+pycparser==2.21
+slixmpp==1.8.4
+tomli==2.0.1
