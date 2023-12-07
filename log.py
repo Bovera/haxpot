@@ -40,10 +40,12 @@ class Log:
         # 不存在就新建地址
         if data == None:
             self.data[jid] = {
+                "last_speak": "2023-11-11 12:20:20",
                 "last_time": "2023-11-11 12:20:20",
-                "answering_num": 0,
+                "answering_num": -1,
                 "prohibited": False,
-                "passed": False
+                "passed": False,
+                "inviter": ""
             }
         # 已经封禁
         if self.data[jid]["prohibited"] == True:
@@ -63,6 +65,9 @@ class Log:
             self.data[jid]["prohibited"] = False
             self.__write()
             self.println("已经解除“" + jid + "”的封禁。")
+            # 如果是直接封禁的，删除信息，要求重新邀请
+            if self.data[jid]["answering_num"] == -1:
+                del self.data[jid]
     
     # 答题通过时调用
     def passed(self, jid: str):
@@ -70,6 +75,7 @@ class Log:
         self.data[jid]["answering_num"] += 1
         self.data[jid]["last_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.data[jid]["passed"] = True
+        self.data[jid]["last_speak"] = self.data[jid]["last_time"]
         self.__write()
         self.println(self.config.log_content % {"time": self.data[jid]["last_time"], "jid": jid,
                                             "num": self.data[jid]["answering_num"], "ifpass": "通过",
@@ -104,14 +110,26 @@ class Log:
         return True, self.config.apply
     
     # 邀请用户进群
-    def invite(self, jid: str):
+    def invite(self, jid: str, inviter: str = ""):
+        if self.data.get(jid) is not None:
+            if self.data[jid]["prohibited"] == True:
+                return "用户“%s”已被封禁，无法邀请申请进群。" % jid
+            return "已经允许用户“%s”申请加群，无需重复邀请。" % jid
         self.data[jid] = {
-            "last_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "last_speak": "2023-11-11 12:20:20",
+            "last_time": "2023-11-11 12:20:20",
             "answering_num": 0,
             "prohibited": False,
-            "passed": False
+            "passed": False,
+            "inviter": "" if inviter == "" else inviter
         }
+        self.__write()
         return "已经允许用户“%s”申请如群。" % jid
+
+    # 用户发言
+    def find_user(self, jid):
+        self.data[jid]["last_speak"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.__write()
     
     # 将内容重新写回文件，每次修改后会自动进行
     def __write(self):
@@ -125,3 +143,17 @@ class Log:
         while True:
             self.applied = 0
             time.sleep(3600)
+    
+    # 检查没有发言记录的用户
+    def check_user(self):
+        wait_time = datetime.timedelta(days = self.config.kick)
+        reply = "\n"
+        for jid in self.data:
+            # 被邀请但是没有通过的用户和封禁的用户
+            if (not self.data[jid]["passed"]) or self.data[jid]["prohibited"]:
+                continue
+            real_time = datetime.datetime.now() - datetime.datetime.strptime(self.data[jid]["last_speak"], '%Y-%m-%d %H:%M:%S')
+            if real_time < wait_time:
+                continue
+            reply += "用户“%(jid)s”不发言时间超过 %(day)i 天。\n" % {"jid": jid, "day": real_time.total_seconds()/3600/24}
+        self.println(reply.strip("\n"))

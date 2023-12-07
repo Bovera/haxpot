@@ -3,6 +3,7 @@ import sys
 import os
 import slixmpp
 from slixmpp import stanza
+from slixmpp import jid
 
 import config
 import log
@@ -37,9 +38,9 @@ class HaxpotBot(slixmpp.ClientXMPP):
     def message(self, msg: stanza.Message):
         """处理用户申请消息"""
         if msg["type"] in ("normal", "chat"):
-            jid = msg["from"].bare # 用户的 JID
+            jid_ = msg["from"].bare # 用户的 JID
             # 正在申请
-            naire = self.naires.get(jid)
+            naire = self.naires.get(jid_)
             if naire is not None:
                 reply = naire.question(msg["body"])
                 # 未完成则继续提问
@@ -48,25 +49,25 @@ class HaxpotBot(slixmpp.ClientXMPP):
                     return
                 # 已经完成
                 if not naire.finish():
-                    msg.reply(self.log_data.failed(jid)).send()
-                    del self.naires[jid]
+                    msg.reply(self.log_data.failed(jid_)).send()
+                    del self.naires[jid_]
                     return
-                msg.reply(self.log_data.passed(jid)).send()
-                del self.naires[jid] # 删除问卷（引用的）
+                msg.reply(self.log_data.passed(jid_)).send()
+                del self.naires[jid_] # 删除问卷（引用的）
                 # 如果允许，则邀请进群
                 if self.config.full_auto:
-                    self.invite(jid)
+                    self.invite(jid_)
                 return
             
             # 开始回答
             if msg["body"] == "开始":
-                ok, reply = self.log_data.apply(jid)
+                ok, reply = self.log_data.apply(jid_)
                 if not ok:
                     msg.reply(reply).send()
                     return
                 # 允许使用，新建问卷开始提问
-                self.naires[jid] = self.bank_data.new_naire()
-                msg.reply(reply + "\n" + self.naires[jid].question(None)).send()
+                self.naires[jid_] = self.bank_data.new_naire()
+                msg.reply(reply + "\n" + self.naires[jid_].question(None)).send()
                 return
             
             if msg["body"] != "":
@@ -75,23 +76,34 @@ class HaxpotBot(slixmpp.ClientXMPP):
     # 群内指令
     def muc_message(self, msg: stanza.Message):
         nick = self.config.nickname
-        # 如果消息是自己发出的且与自己无关
-        if msg["mucnick"] == nick or not msg["body"].startswith(nick + ": "):
+        # 如果消息是自己发出的
+        if msg["mucnick"] == nick:
+            return
+        # 如果消息来自被控制群且要统计发言
+        if msg["from"].bare == self.config.ctrl_group:
+            whom = self.plugin['xep_0045'].get_jid_property(self.config.ctrl_group, msg["mucnick"], 'jid')
+            whom = jid.JID(whom).bare
+            if self.config.kick > 0:
+               self.log_data.find_user(whom)
+        # 如果消息与自己无关
+        if not msg["body"].startswith(nick + ": "):
             return
         # 来自日志群
         if msg["from"].bare == self.config.log_group:
             command: str = msg["body"][len(nick)+2:]
             if command.startswith("解封"):
-                jid = command[2:].strip()
-                self.log_data.allow(jid)
+                jid_ = command[2:].strip()
+                self.log_data.allow(jid_)
             elif command.startswith("封禁"):
-                jid = command[2:].strip()
-                self.log_data.prohibit(jid)
+                jid_ = command[2:].strip()
+                self.log_data.prohibit(jid_)
             elif command.startswith("关机"):
                 if self.config.shutdown:
                     self.shutdown()
                 else:
                     self.println("本机器人没有权限关闭计算机！")
+            elif command.startswith("检查沉默用户"):
+                self.log_data.check_user()
             return
         # 没启用了邀请人制度就不管了
         if not self.config.invite:
@@ -100,8 +112,9 @@ class HaxpotBot(slixmpp.ClientXMPP):
         if msg["from"].bare == self.config.ctrl_group:
             command: str = msg["body"][len(nick)+2:]
             if command.startswith("邀请"):
-                jid = command[2:].strip()
-                self.send_message(self.config.log_group, self.log_data.invite(jid), mtype="groupchat")
+                jid_ = command[2:].strip()
+                reply = self.log_data.invite(jid_, whom)
+                self.send_message(self.config.ctrl_group, reply, mtype="groupchat")
 
     # 关机
     def shutdown(self):
@@ -122,10 +135,8 @@ class HaxpotBot(slixmpp.ClientXMPP):
         self.send_message(self.config.log_group, msg, mtype="groupchat")
     
     # 邀请 JID 进群
-    def invite(self, jid: str):
-        self.plugin['xep_0045'].invite(self.config.ctrl_group, jid)
-        nick = self.plugin['xep_0045'].get_nick(self.config.ctrl_group, jid)
-        self.plugin['xep_0045'].set_role(self.config.ctrl_group, nick, 'participant')
+    def invite(self, jid_: str):
+        self.plugin['xep_0045'].invite(self.config.ctrl_group, jid_)
 
 if __name__ == '__main__':
     # Setup logging.
